@@ -87,10 +87,13 @@ func DealWithIt(payload []byte) ([]byte, error) {
 			if err != nil {
 				return nil, err
 			}
+			fmt.Printf("created instance %v\n", inst)
 		} else {
 			return nil, err
 		}
 	}
+
+	fmt.Println("instance already exists, skipping for now")
 
 	return []byte(`{"msg": "farts are funny"}`), nil
 }

@@ -20,7 +20,7 @@ run:
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy:
-	helm upgrade --install cloudkinds-servicecatalog charts/cloudkinds-servicecatalog \
+	helm upgrade --install cloudkinds-servicecatalog --namespace cloudkinds charts/cloudkinds-servicecatalog \
 		--recreate-pods \
 		--set image.registry="${IMG}",image.tag="${TAG}" \
    		--set imagePullPolicy="Always",deploymentStrategy="Recreate"
