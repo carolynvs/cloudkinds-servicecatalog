@@ -1,5 +1,0 @@
-apiVersion: v1
-appVersion: "0.1"
-description: CloudKinds
-name: cloudkinds
-version: 0.1.0

@@ -1,0 +1,27 @@
+[[constraint]]
+  branch = "master"
+  name = "github.com/carolynvs/cloudkinds"
+
+[[constraint]]
+  name = "github.com/kubernetes-incubator/service-catalog"
+  version = "0.1.37"
+
+[[constraint]]
+  name = "github.com/pkg/errors"
+  version = "0.8.0"
+
+[[constraint]]
+  name = "k8s.io/apimachinery"
+  version = "kubernetes-1.12.0"
+
+[[override]]
+  name = "k8s.io/client-go"
+  version = "kubernetes-1.12.0"
+
+[[override]]
+  name = "github.com/Azure/go-autorest"
+  revision = "1ff28809256a84bb6966640ff3d0371af82ccba4"
+
+[prune]
+  go-tests = true
+  unused-packages = true

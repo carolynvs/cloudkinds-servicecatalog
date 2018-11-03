@@ -1,26 +1,29 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= carolynvs/cloudkinds-servicecatalog
+REGISTRY ?= carolynvs/
+IMG ?= ${REGISTRY}cloudkinds-servicecatalog
 TAG ?= latest
 
-all: test provider
+all: test build
 
 # Run tests
-test: generate fmt vet manifests
+test: build fmt vet
 	go test ./pkg/... ./cmd/... -coverprofile cover.out
 
 # Build provider binary
-provider: generate fmt vet
-	go build -o bin/manager github.com/carolynvs/cloudkinds/cmd/provider
+build:
+	go build -o bin/servicecatalog github.com/carolynvs/cloudkinds-servicecatalog/cmd/servicecatalog
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
-run: generate fmt vet
-	go run ./cmd/manager/main.go
+run:
+	go run ./cmd/servicecatalog/main.go
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: docker-push
-	helm upgrade --install cloudkinds-svcat charts/cloudkinds-servicecatalog \
-	  --recreate-pods --set imagePullPolicy="Always",deploymentStrategy="Recreate"
+deploy:
+	helm upgrade --install cloudkinds-servicecatalog charts/cloudkinds-servicecatalog \
+		--recreate-pods \
+		--set image.registry="${IMG}",image.tag="${TAG}" \
+   		--set imagePullPolicy="Always",deploymentStrategy="Recreate"
 
 # Run go fmt against code
 fmt:
@@ -32,12 +35,8 @@ vet:
 
 # Build the docker image
 docker-build:
-	docker build -t ${IMG}:${TAG} -f cmd/manager/Dockerfile .
-	docker build -t ${IMG}-sampleprovider:${TAG} -f cmd/sampleprovider/Dockerfile .
-	docker build -t ${IMG}-servicecatalog:${TAG} -f cmd/servicecatalog/Dockerfile .
-	@echo "updating kustomize image patch file for manager resource"
-	sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/default/manager_image_patch.yaml
+	docker build -t ${IMG}:${TAG} -f cmd/servicecatalog/Dockerfile .
 
 # Push the docker image
 docker-push: docker-build
-	docker push ${IMG}-servicecatalog:${TAG}
+	docker push ${IMG}:${TAG}

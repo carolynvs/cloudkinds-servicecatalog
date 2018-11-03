@@ -6,11 +6,11 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/carolynvs/cloudkinds/pkg/providers/servicecatalog"
+	"github.com/carolynvs/cloudkinds-servicecatalog/pkg/servicecatalog"
 )
 
 func main() {
-	fmt.Println("Service Catalog Provider reporting for duty! 💪")
+	fmt.Println("Service Catalog Provider reporting for duty! 🤖")
 	fmt.Println("Listening on *:8080")
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("Received %s\n", r.URL.Path)
@@ -27,8 +27,8 @@ func main() {
 		result, err := servicecatalog.DealWithIt(payload)
 		if err != nil {
 			fmt.Println(err)
-			fmt.Fprintf(w, "%s", err)
 			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "%s", err)
 			return
 		}
 		fmt.Printf("\t%v\n", string(result))
