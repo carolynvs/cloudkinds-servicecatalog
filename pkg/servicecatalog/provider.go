@@ -12,6 +12,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 )
@@ -88,6 +89,12 @@ func (p CatalogProvider) createService(r *unstructured.Unstructured) (*v1beta1.S
 		return nil, err
 	}
 
+	params := r.Object["spec"]
+	paramsJson, err := json.Marshal(params)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create the instance
 	inst := &v1beta1.ServiceInstance{
 		ObjectMeta: metav1.ObjectMeta{
@@ -96,6 +103,7 @@ func (p CatalogProvider) createService(r *unstructured.Unstructured) (*v1beta1.S
 		},
 		Spec: v1beta1.ServiceInstanceSpec{
 			PlanReference: *ref,
+			Parameters:    &runtime.RawExtension{Raw: paramsJson},
 		},
 	}
 

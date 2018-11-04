@@ -1,5 +1,5 @@
 apiVersion: cloudkinds.k8s.io/v1alpha1
-kind: Provider
+kind: CloudProvider
 metadata:
   name: {{ include "cloudkinds-servicecatalog.fullname" . }}
 spec:

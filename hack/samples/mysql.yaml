@@ -3,4 +3,6 @@ kind: MySQL
 metadata:
   name: mysql
 spec:
-  secure: true
+  persistence:
+    enabled: false
+  mysqlDatabase: wordpress
