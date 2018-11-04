@@ -5,4 +5,4 @@ metadata:
 spec:
   webhook: http://{{ include "cloudkinds-servicecatalog.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
   kinds:
-  - CloudResource
+  - MySQL # TODO: update our own provider dynamically with services from the catalog

@@ -2,7 +2,6 @@ package servicecatalog
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/carolynvs/cloudkinds/pkg/providers"
@@ -12,24 +11,22 @@ import (
 	"github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-
 )
 
-func DealWithIt(payload []byte) ([]byte, error) {
-	// parse the payload
-	evt := &providers.ResourceEvent{}
-	err := json.Unmarshal(payload, evt)
-	if err != nil {
-		return nil, err
-	}
+type CatalogProvider struct {
+	crdClient   dynamic.Interface
+	svcatClient svcatclient.Interface
+}
 
+func NewProvider() (*CatalogProvider, error) {
 	// load up the current cluster config
 	config := kube.GetConfig("", "")
 	restConfig, err := config.ClientConfig()
 	if err != nil {
-		return nil, errors.Wrapf(err,"could not get Kubernetes config")
+		return nil, errors.Wrapf(err, "could not get Kubernetes config")
 	}
 	crdClient, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
@@ -40,8 +37,23 @@ func DealWithIt(payload []byte) ([]byte, error) {
 		return nil, errors.Wrapf(err, "could not create service catalog client")
 	}
 
+	p := &CatalogProvider{
+		crdClient:   crdClient,
+		svcatClient: svcatClient,
+	}
+	return p, nil
+}
+
+func (p CatalogProvider) DealWithIt(payload []byte) ([]byte, error) {
+	// parse the payload
+	evt := &providers.ResourceEvent{}
+	err := json.Unmarshal(payload, evt)
+	if err != nil {
+		return nil, err
+	}
+
 	// Retrieve the CRD
-	// TODO: put this on ResourceEvent, and make sure using the name ApiVersion is correct (since it's really the group version)
+	// TODO: put this method on ResourceEvent, and make sure using the name ApiVersion is correct (since it's really the group version)
 	gv, err := schema.ParseGroupVersion(evt.Resource.APIVersion)
 	if err != nil {
 		return nil, err
@@ -50,50 +62,87 @@ func DealWithIt(payload []byte) ([]byte, error) {
 	// TODO: damn dirty hack, I think I need to read the crd to get this?
 	pluralResource := strings.ToLower(evt.Resource.Kind) + "s"
 	resourceType := schema.GroupVersionResource{Group: gv.Group, Version: gv.Version, Resource: pluralResource}
-	resourceClient := crdClient.Resource(resourceType)
-	r, err :=resourceClient.Namespace(evt.Resource.Namespace).Get(evt.Resource.Name, metav1.GetOptions{})
+	resourceClient := p.crdClient.Resource(resourceType)
+	r, err := resourceClient.Namespace(evt.Resource.Namespace).Get(evt.Resource.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not retrieve the resource %#v", evt.Resource)
 	}
-	fmt.Println(r.Object)
 
 	// find the corresponding service instance
-	inst, err := svcatClient.ServicecatalogV1beta1().ServiceInstances(evt.Resource.Namespace).Get(evt.Resource.Name, metav1.GetOptions{})
+	_, err = p.svcatClient.ServicecatalogV1beta1().ServiceInstances(evt.Resource.Namespace).Get(evt.Resource.Name, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			// Create the instance
-			inst = &v1beta1.ServiceInstance{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: evt.Resource.Name,
-					Namespace: evt.Resource.Namespace,
-				},
-			}
-
-			// Mark the instance as owned by the CRD
-			var t = true
-			var f = false
-			ownerRef := metav1.OwnerReference{
-				APIVersion:         r.GetAPIVersion(),
-				Kind:               r.GetKind(),
-				Name:               r.GetName(),
-				UID:                r.GetUID(),
-				BlockOwnerDeletion: &t,
-				Controller:         &f,
-			}
-
-			inst.SetOwnerReferences(append(inst.GetOwnerReferences(), ownerRef))
-
-			inst, err = svcatClient.ServicecatalogV1beta1().ServiceInstances(inst.Namespace).Create(inst)
-			if err != nil {
-				return nil, err
-			}
-			fmt.Printf("created instance %v\n", inst)
+			_, err = p.createService(r)
+			return []byte(`{"msg": "created service instance"}`), err
 		} else {
 			return nil, err
 		}
 	}
 
-	fmt.Println("instance already exists, skipping for now")
+	return []byte(`{"msg": "instance already exists, update not implemented yet"}`), nil
+}
 
-	return []byte(`{"msg": "farts are funny"}`), nil
+func (p CatalogProvider) createService(r *unstructured.Unstructured) (*v1beta1.ServiceInstance, error) {
+	ref, err := p.resolveService(r)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the instance
+	inst := &v1beta1.ServiceInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      r.GetName(),
+			Namespace: r.GetNamespace(),
+		},
+		Spec: v1beta1.ServiceInstanceSpec{
+			PlanReference: *ref,
+		},
+	}
+
+	// Mark the instance as owned by the CRD
+	var t = true
+	var f = false
+	ownerRef := metav1.OwnerReference{
+		APIVersion:         r.GetAPIVersion(),
+		Kind:               r.GetKind(),
+		Name:               r.GetName(),
+		UID:                r.GetUID(),
+		BlockOwnerDeletion: &t,
+		Controller:         &f,
+	}
+
+	inst.SetOwnerReferences(append(inst.GetOwnerReferences(), ownerRef))
+
+	return p.svcatClient.ServicecatalogV1beta1().ServiceInstances(inst.Namespace).Create(inst)
+}
+
+func (p CatalogProvider) resolveService(r *unstructured.Unstructured) (*v1beta1.PlanReference, error) {
+	// this is a boring search, we can do better later
+	ref := &v1beta1.PlanReference{}
+
+	classes, err := p.svcatClient.ServicecatalogV1beta1().ClusterServiceClasses().List(metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	for _, class := range classes.Items {
+		if strings.ToLower(class.Name) == strings.ToLower(r.GetKind()) {
+			ref.ClusterServiceClassName = class.Name
+			break
+		}
+	}
+	if ref.ClusterServiceClassName == "" {
+		return nil, errors.Errorf("could not find a class for %v", r)
+	}
+
+	plans, err := p.svcatClient.ServicecatalogV1beta1().ClusterServicePlans().List(metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	for _, plan := range plans.Items {
+		if plan.Spec.ClusterServiceClassRef.Name == ref.ClusterServiceClassName {
+			ref.ClusterServicePlanName = plan.Name
+			return ref, nil
+		}
+	}
+	return nil, errors.Errorf("could not find a plan for %v", r)
 }

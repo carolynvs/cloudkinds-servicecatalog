@@ -1,0 +1,6 @@
+apiVersion: cloudkinds.k8s.io/v1alpha1
+kind: MySQL
+metadata:
+  name: mysql
+spec:
+  secure: true
